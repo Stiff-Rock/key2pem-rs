@@ -1,0 +1,16 @@
+[package]
+name = "key2pem"
+version = "0.1.0"
+edition = "2024"
+authors = ["Stiff-Rock <yaguitor@gmail.com>"]
+
+[dependencies]
+ssh-key = { version = "0.6.7", features = ["rsa", "ed25519", "ecdsa", "p256", "p384", "p521", "dsa", "std", "encryption"] }
+pem = "3.0.5"
+rsa = "0.9.8"
+
+log="0.4.27"
+fern={version = "0.7.1", features = ["colored"]}
+ed25519-dalek = {version = "2.1.1", features = ["pkcs8"]}
+spki = "0.7.3"
+pkcs8 = "0.10.2"

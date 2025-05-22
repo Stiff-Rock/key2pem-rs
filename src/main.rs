@@ -72,6 +72,7 @@ pub fn convert_ssh_key_to_pem(
     Ok(())
 }
 
+//TODO: TRY TO CONVERT id_ed25519 WITH THE auth-git-pem AND SEE IF IT WORKS AND ITS CONTENT
 fn main() {
     setup_logging();
 

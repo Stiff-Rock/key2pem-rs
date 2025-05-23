@@ -1,0 +1,3 @@
+[submodule "stc/auth-git2-pem"]
+	path = stc/auth-git2-pem
+	url = https://github.com/Stiff-Rock/auth-git2-rs.git

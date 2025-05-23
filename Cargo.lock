@@ -314,6 +314,8 @@ dependencies = [
  "ff",
  "generic-array",
  "group",
+ "hkdf",
+ "pem-rfc7468",
  "pkcs8",
  "rand_core",
  "sec1",
@@ -391,6 +393,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hkdf"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+dependencies = [
+ "hmac",
+]
+
+[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -413,9 +424,13 @@ dependencies = [
 name = "key2pem"
 version = "0.1.0"
 dependencies = [
+ "ecdsa",
  "ed25519-dalek",
  "fern",
  "log",
+ "p256",
+ "p384",
+ "p521",
  "pem",
  "pkcs8",
  "rsa",

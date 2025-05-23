@@ -1,23 +1,25 @@
 use ed25519_dalek::SigningKey;
-use fern::{
-    Dispatch,
-    colors::{Color, ColoredLevelConfig},
-};
-use log::*;
+use log::debug;
+use p256::SecretKey as P256SecretKey;
+use p384::SecretKey as P384SecretKey;
+use p521::SecretKey as P521SecretKey;
 use pkcs8::EncodePrivateKey;
 use rsa::{BigUint, pkcs1::EncodeRsaPrivateKey};
-use spki::der::zeroize::Zeroizing;
-use ssh_key::Algorithm;
 use ssh_key::private::PrivateKey;
+use ssh_key::{Algorithm, EcdsaCurve};
 use std::fs;
 use std::path::Path;
 
 /// Convert an SSH key file to OpenSSL PEM format
+/// Note: Ed25519 convertion results in a non-valid key, Ecdsa convertion works with ssh connection
+/// with github but not through git2's libssh2-rs library and DSA is no longer supported by GitHub
 pub fn convert_ssh_key_to_pem(
     input_path: &Path,
     output_path: &Path,
-    _passphrase: Option<&str>,
+    passphrase: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    debug!("Attepmting convertion of key at {:#?}", input_path);
+
     let key_data = fs::read_to_string(input_path)?;
 
     let private_key = PrivateKey::from_openssh(&key_data)?;
@@ -25,7 +27,7 @@ pub fn convert_ssh_key_to_pem(
     //TODO: ADD PASSPHRASE LATER
     let pem_content = match &private_key.algorithm() {
         //NOTE: THE HAHS IN HERE MUGHT BE USEFUL TO DETERMINE WHICH to_pkcs TO USE
-        Algorithm::Rsa { hash: _ } => {
+        Algorithm::Rsa { hash } => {
             debug!("Provided key is RSA");
 
             let rsa_keypair: &ssh_key::private::RsaKeypair = private_key
@@ -44,8 +46,6 @@ pub fn convert_ssh_key_to_pem(
 
             rsa_private_key.to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)?
         }
-        //Algorithm::Dsa => {}
-        //Algorithm::Ecdsa { .. } => {}
         Algorithm::Ed25519 => {
             debug!("Provided key is Ed25519");
 
@@ -58,11 +58,34 @@ pub fn convert_ssh_key_to_pem(
 
             let signing_key = SigningKey::from_bytes(&private_key_bytes);
 
-            let pem = signing_key
+            signing_key
                 .to_pkcs8_pem(pkcs8::LineEnding::LF)
-                .map_err(|e| format!("Falied to convert to PEM key - {e}"))?;
+                .map_err(|e| format!("Falied to convert private key to PKCS8 PEM - {e}"))?
+        }
+        Algorithm::Ecdsa { curve } => {
+            debug!("Provided key is Ecdsa");
 
-            pem
+            let ecdsa_keypair = private_key
+                .key_data()
+                .ecdsa()
+                .ok_or("Unable to obtain ECDSA keypair")?;
+
+            let private_key_bytes = ecdsa_keypair.private_key_bytes();
+
+            match curve {
+                EcdsaCurve::NistP256 => {
+                    let sk = P256SecretKey::from_slice(private_key_bytes)?;
+                    sk.to_sec1_pem(pkcs8::LineEnding::LF)?
+                }
+                EcdsaCurve::NistP384 => {
+                    let sk = P384SecretKey::from_slice(private_key_bytes)?;
+                    sk.to_sec1_pem(pkcs8::LineEnding::LF)?
+                }
+                EcdsaCurve::NistP521 => {
+                    let sk = P521SecretKey::from_slice(private_key_bytes)?;
+                    sk.to_sec1_pem(pkcs8::LineEnding::LF)?
+                }
+            }
         }
         _ => return Err("Unsupported key algorithm".into()),
     };
@@ -70,43 +93,4 @@ pub fn convert_ssh_key_to_pem(
     fs::write(output_path, pem_content)?;
 
     Ok(())
-}
-
-//TODO: TRY TO CONVERT id_ed25519 WITH THE auth-git-pem AND SEE IF IT WORKS AND ITS CONTENT
-fn main() {
-    setup_logging();
-
-    let input = Path::new(r"C:\Users\Yago\.ssh\id_ed25519");
-    let output = Path::new(r"C:\Users\Yago\.ssh\id_rsa");
-    let passphrase = None;
-
-    match convert_ssh_key_to_pem(input, output, passphrase) {
-        Ok(_) => debug!("Successfully converted key to PEM format"),
-        Err(e) => error!("Error converting key: {}", e),
-    }
-}
-
-fn setup_logging() {
-    let colors = ColoredLevelConfig::new()
-        .error(Color::Red)
-        .warn(Color::Yellow)
-        .info(Color::Green)
-        .debug(Color::Blue)
-        .trace(Color::Magenta);
-
-    let base_config = fern::Dispatch::new().level(LevelFilter::Trace);
-    Dispatch::new()
-        .chain(base_config)
-        .format(move |out, message, record| {
-            out.finish(format_args!(
-                "[{}] {}",
-                colors.color(record.level()),
-                message
-            ))
-        })
-        .chain(std::io::stdout())
-        .apply()
-        .unwrap();
-
-    info!("Logger initialized");
 }

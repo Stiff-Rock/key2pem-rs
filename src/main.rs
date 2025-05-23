@@ -1,20 +1,38 @@
+use std::{
+    fs::{create_dir_all, remove_dir_all},
+    path::Path,
+};
+
+use auth_git2_pem::GitAuthenticator;
+use dirs::home_dir;
 use fern::{
     Dispatch,
     colors::{Color, ColoredLevelConfig},
 };
-use key2pem::convert_ssh_key_to_pem;
-use log::{LevelFilter, debug, error, info};
-use std::path::Path;
+use log::{LevelFilter, info};
 
 fn main() {
     setup_logging();
 
-    let input = Path::new(r"C:\Users\Yago\.ssh\id_rsa");
-    let output = Path::new(r"C:\Users\Yago\.ssh\id_rsa_pem");
+    let home = home_dir().expect("Error getting home directory");
+    let into = home.join("Desktop").join("PrivateRepo");
 
-    match convert_ssh_key_to_pem(input, output) {
-        Ok(_) => debug!("Successfully converted key to PEM format"),
-        Err(e) => error!("Error converting key: {}", e),
+    if !into.exists() {
+        panic!("Target dir <{}> doesn't exist", into.display());
+    }
+
+    clear_directory(&into);
+
+    let ssh_clone_url = "git@github.com:Stiff-Rock/JavaFx.git";
+
+    // IMPLEMENT UI PROMPTER
+    let auth = GitAuthenticator::new();
+
+    let res = auth.clone_repo(ssh_clone_url, &into);
+
+    match res {
+        Ok(_) => println!("Successfully cloned repository"),
+        Err(error) => eprintln!("Error cloning repository: {}", error),
     }
 }
 
@@ -41,4 +59,12 @@ fn setup_logging() {
         .unwrap();
 
     info!("Logger initialized");
+}
+
+fn clear_directory(path: &Path) {
+    if path.exists() {
+        remove_dir_all(&path).expect("Error removing target directory");
+    }
+
+    create_dir_all(&path).expect("Error creating target directory");
 }

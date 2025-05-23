@@ -5,6 +5,7 @@ use p384::SecretKey as P384SecretKey;
 use p521::SecretKey as P521SecretKey;
 use pkcs8::EncodePrivateKey;
 use rsa::{BigUint, pkcs1::EncodeRsaPrivateKey};
+use spki::der::zeroize::Zeroizing;
 use ssh_key::private::PrivateKey;
 use ssh_key::{Algorithm, EcdsaCurve};
 use std::fs;
@@ -24,10 +25,8 @@ pub fn convert_ssh_key_to_pem(
 
     let private_key = PrivateKey::from_openssh(&key_data)?;
 
-    //TODO: ADD PASSPHRASE LATER
     let pem_content = match &private_key.algorithm() {
-        //NOTE: THE HAHS IN HERE MUGHT BE USEFUL TO DETERMINE WHICH to_pkcs TO USE
-        Algorithm::Rsa { hash } => {
+        Algorithm::Rsa { .. } => {
             debug!("Provided key is RSA");
 
             let rsa_keypair: &ssh_key::private::RsaKeypair = private_key
@@ -44,7 +43,34 @@ pub fn convert_ssh_key_to_pem(
 
             let rsa_private_key = rsa::RsaPrivateKey::from_components(n, e, d, primes)?;
 
-            rsa_private_key.to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)?
+            if let Some(pass) = passphrase {
+                use rand::rngs::OsRng;
+
+                let pkcs8_der: pkcs8::SecretDocument = rsa_private_key.to_pkcs8_der()?;
+
+                /*NOTE:
+                    fn to_pkcs8_encrypted_pem(
+                        &self,
+                        rng: impl CryptoRng + RngCore,
+                        password: impl AsRef<[u8]>,
+                        line_ending: LineEnding,
+                    ) -> Result<Zeroizing<String>>
+                    Available on crate features encryption and pem only.
+                    Serialize this private key as an encrypted PEM-encoded PKCS#8 private key using the provided to derive an encryption key.
+                */
+
+                pkcs8_der
+                    .to_encrypted_pem(
+                        OsRng, // Secure random number generator
+                        pass,  // Using the passphrase
+                        pkcs8::LineEnding::LF,
+                    )?
+                    .to_string();
+
+                Zeroizing::new(String::new())
+            } else {
+                rsa_private_key.to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)?
+            }
         }
         Algorithm::Ed25519 => {
             debug!("Provided key is Ed25519");
@@ -72,18 +98,19 @@ pub fn convert_ssh_key_to_pem(
 
             let private_key_bytes = ecdsa_keypair.private_key_bytes();
 
+            let line_ending = pkcs8::LineEnding::LF;
             match curve {
                 EcdsaCurve::NistP256 => {
                     let sk = P256SecretKey::from_slice(private_key_bytes)?;
-                    sk.to_sec1_pem(pkcs8::LineEnding::LF)?
+                    sk.to_sec1_pem(line_ending)?
                 }
                 EcdsaCurve::NistP384 => {
                     let sk = P384SecretKey::from_slice(private_key_bytes)?;
-                    sk.to_sec1_pem(pkcs8::LineEnding::LF)?
+                    sk.to_sec1_pem(line_ending)?
                 }
                 EcdsaCurve::NistP521 => {
                     let sk = P521SecretKey::from_slice(private_key_bytes)?;
-                    sk.to_sec1_pem(pkcs8::LineEnding::LF)?
+                    sk.to_sec1_pem(line_ending)?
                 }
             }
         }
